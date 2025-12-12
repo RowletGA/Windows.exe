@@ -468,8 +468,8 @@ function Check-Status {
     $gamesKey = 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games'
     $gpuPriority = (Get-ItemProperty -Path $gamesKey -Name 'GPU Priority' -ErrorAction SilentlyContinue).'GPU Priority'
     $priority = (Get-ItemProperty -Path $gamesKey -Name 'Priority' -ErrorAction SilentlyContinue).Priority
-    Write-Host "HAGS (HwSchMode): $hags | GameDVR AllowGameDVR: $gameDvr"
-    Write-Host "NetworkThrottlingIndex: $netThrottle | SystemResponsiveness: $sysResp | GPU Priority/Priority: $gpuPriority/$priority"
+    Write-Host ("HAGS (HwSchMode): {0} | GameDVR AllowGameDVR: {1}" -f $(if ($hags -ne $null) { $hags } else { 'no leído' }), $(if ($gameDvr -ne $null) { $gameDvr } else { 'no leído' }))
+    Write-Host ("NetworkThrottlingIndex: {0} | SystemResponsiveness: {1} | GPU Priority/Priority: {2}/{3}" -f $(if ($netThrottle -ne $null) { $netThrottle } else { 'no leído' }), $(if ($sysResp -ne $null) { $sysResp } else { 'no leído' }), $(if ($gpuPriority -ne $null) { $gpuPriority } else { 'no leído' }), $(if ($priority -ne $null) { $priority } else { 'no leído' }))
 
     $tcpInternet = Get-NetTCPSetting -SettingName Internet -ErrorAction SilentlyContinue
     $tcpCustom = Get-NetTCPSetting -SettingName InternetCustom -ErrorAction SilentlyContinue
@@ -531,7 +531,7 @@ function Check-Status {
     $menuDelay = (Get-ItemProperty -Path 'HKCU\\Control Panel\\Desktop' -Name 'MenuShowDelay' -ErrorAction SilentlyContinue).MenuShowDelay
     $taskbarAnimations = (Get-ItemProperty -Path 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced' -Name 'TaskbarAnimations' -ErrorAction SilentlyContinue).TaskbarAnimations
     $visualFX = (Get-ItemProperty -Path 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects' -Name 'VisualFXSetting' -ErrorAction SilentlyContinue).VisualFXSetting
-    Write-Host "UI: MenuShowDelay=$menuDelay, TaskbarAnimations=$taskbarAnimations, VisualFXSetting=$visualFX"
+    Write-Host ("UI: MenuShowDelay={0}, TaskbarAnimations={1}, VisualFXSetting={2}" -f $(if ($menuDelay -ne $null) { $menuDelay } else { 'no leído' }), $(if ($taskbarAnimations -ne $null) { $taskbarAnimations } else { 'no leído' }), $(if ($visualFX -ne $null) { $visualFX } else { 'no leído' }))
 
     $blockList = @(
         'Microsoft.3DBuilder','Microsoft.BingNews','Microsoft.BingWeather','Microsoft.GetHelp','Microsoft.Getstarted','Microsoft.MicrosoftOfficeHub','Microsoft.MicrosoftSolitaireCollection','Microsoft.MixedReality.Portal','Microsoft.People','Microsoft.SkypeApp','Microsoft.Todos','Microsoft.WindowsAlarms','Microsoft.WindowsCommunicationsApps','Microsoft.WindowsFeedbackHub','Microsoft.ZuneMusic','Microsoft.ZuneVideo','Microsoft.YourPhone','MicrosoftTeams'
