@@ -56,10 +56,17 @@ function Set-RegistryValueSafe {
         [object]$Value,
         [Microsoft.Win32.RegistryValueKind]$Type = [Microsoft.Win32.RegistryValueKind]::DWord
     )
-    $existing = (Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue).$Name
+    $regPath = $Path
+    if ($Path -notmatch '^Registry::') { $regPath = "Registry::$Path" }
+    $existing = (Get-ItemProperty -Path $regPath -Name $Name -ErrorAction SilentlyContinue).$Name
     Remember 'Registry' "$Path|$Name" $existing
-    if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
-    Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type
+    if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+    $prop = Get-ItemProperty -Path $regPath -Name $Name -ErrorAction SilentlyContinue
+    if ($null -eq $prop) {
+        New-ItemProperty -Path $regPath -Name $Name -Value $Value -PropertyType $Type | Out-Null
+    } else {
+        Set-ItemProperty -Path $regPath -Name $Name -Value $Value | Out-Null
+    }
 }
 
 function Restore-RegistryValues {
@@ -181,12 +188,16 @@ function Optimize-Network {
     Remember 'TCPSetting' 'Internet' (Get-NetTCPSetting -SettingName Internet)
     Set-NetTCPSetting -SettingName InternetCustom -AutoTuningLevelLocal Normal -ScalingHeuristics Disabled -EcnCapability Disabled -Timestamps Disabled -MemoryPressureProtection Enabled -InitialCongestionWindow 10 -MinRto 300 | Out-Null
     Set-NetTCPSetting -SettingName Internet -AutoTuningLevelLocal Normal | Out-Null
-    Write-Action "Desactivando ahorro de energ?a de adaptadores..."
+    Write-Action "Desactivando ahorro de energía de adaptadores..."
     $adapters = Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' -or $_.Status -eq 'Dormant' }
     foreach ($nic in $adapters) {
         $pm = Get-NetAdapterPowerManagement -Name $nic.Name
         Remember 'NICPower' $nic.Name $pm
-        Set-NetAdapterPowerManagement -Name $nic.Name -AllowComputerToTurnOffDevice Disabled -DeviceSleepOnDisconnect Disabled -WakeOnMagicPacket Enabled -WakeOnPattern Disabled -ErrorAction SilentlyContinue
+        try {
+            Set-NetAdapterPowerManagement -Name $nic.Name -WakeOnMagicPacket Enabled -WakeOnPattern Disabled -DeviceSleepOnDisconnect Disabled -ReduceSpeedOnPowerDown Disabled -ErrorAction Stop
+        } catch {
+            # Si alguna propiedad no existe en el adaptador, lo ignoramos
+        }
     }
     Write-Action "Aplicando desactivaci?n de Nagle por interfaz..."
     $ifaces = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
