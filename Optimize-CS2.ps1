@@ -56,10 +56,17 @@ function Set-RegistryValueSafe {
         [object]$Value,
         [Microsoft.Win32.RegistryValueKind]$Type = [Microsoft.Win32.RegistryValueKind]::DWord
     )
-    $existing = (Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue).$Name
+    $regPath = $Path
+    if ($Path -notmatch '^Registry::') { $regPath = "Registry::$Path" }
+    $existing = (Get-ItemProperty -Path $regPath -Name $Name -ErrorAction SilentlyContinue).$Name
     Remember 'Registry' "$Path|$Name" $existing
-    if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
-    Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type
+    if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+    $prop = Get-ItemProperty -Path $regPath -Name $Name -ErrorAction SilentlyContinue
+    if ($null -eq $prop) {
+        New-ItemProperty -Path $regPath -Name $Name -Value $Value -PropertyType $Type | Out-Null
+    } else {
+        Set-ItemProperty -Path $regPath -Name $Name -Value $Value | Out-Null
+    }
 }
 
 function Restore-RegistryValues {
@@ -125,13 +132,25 @@ function Set-UltimatePlan {
     Write-Action "Creando/activando plan Ultimate Performance personalizado..."
     $currentPlan = (powercfg /GETACTIVESCHEME) 2>$null
     if ($currentPlan -match '\: ([a-f0-9\-]+)\s') { Remember 'Power' 'PreviousPlan' $Matches[1] }
-    $dup = (powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61) 2>$null
-    $newGuid = $dup | Select-String -Pattern 'GUID: ([a-f0-9\-]+)' | ForEach-Object { $_.Matches[0].Groups[1].Value }
-    if (-not $newGuid) { $newGuid = 'e9a42b02-d5df-448d-aa00-03f14749eb61' }
-    powercfg -changename $newGuid "CS2 Ultimate Performance" | Out-Null
+
+    $existing = powercfg /L 2>$null | Select-String -Pattern '([a-f0-9\-]+)\s+\(CS2 Ultimate Performance\)'
+    if ($existing) {
+        $newGuid = $existing.Matches[0].Groups[1].Value
+    } else {
+        $dup = (powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61) 2>$null
+        $newGuid = $dup | Select-String -Pattern 'GUID: ([a-f0-9\-]+)' | ForEach-Object { $_.Matches[0].Groups[1].Value }
+        if (-not $newGuid) { $newGuid = 'e9a42b02-d5df-448d-aa00-03f14749eb61' }
+        powercfg -changename $newGuid "CS2 Ultimate Performance" | Out-Null
+    }
+
     powercfg -setactive $newGuid | Out-Null
     powercfg -setacvalueindex $newGuid SUB_VIDEO VIDEOIDLE 0 | Out-Null
     powercfg -setacvalueindex $newGuid SUB_SLEEP STANDBYIDLE 0 | Out-Null
+
+    $active = (powercfg /GETACTIVESCHEME) 2>$null
+    if ($active -notmatch $newGuid) {
+        powercfg -setactive $newGuid | Out-Null
+    }
 }
 
 function Restore-PowerPlan {
@@ -162,6 +181,28 @@ function Restore-TimerResolution {
     }
 }
 
+function Restore-NetworkTweaks {
+    if ($script:Backup.ContainsKey('NICPower')) {
+        foreach ($nic in $script:Backup['NICPower'].Keys) {
+            $pm = $script:Backup['NICPower'][$nic]
+            try {
+                Set-NetAdapterPowerManagement -Name $nic -WakeOnMagicPacket $pm.WakeOnMagicPacket -WakeOnPattern $pm.WakeOnPattern -DeviceSleepOnDisconnect $pm.DeviceSleepOnDisconnect -ReduceSpeedOnPowerDown $pm.ReduceSpeedOnPowerDown -ErrorAction SilentlyContinue
+            } catch {}
+        }
+    }
+    if ($script:Backup.ContainsKey('InterfaceMetric')) {
+        foreach ($alias in $script:Backup['InterfaceMetric'].Keys) {
+            $meta = $script:Backup['InterfaceMetric'][$alias]
+            try {
+                Set-NetIPInterface -InterfaceAlias $alias -AddressFamily IPv4 -AutomaticMetric $meta.AutomaticMetric -ErrorAction SilentlyContinue
+                if (-not $meta.AutomaticMetric) {
+                    Set-NetIPInterface -InterfaceAlias $alias -AddressFamily IPv4 -InterfaceMetric $meta.InterfaceMetric -ErrorAction SilentlyContinue
+                }
+            } catch {}
+        }
+    }
+}
+
 function Optimize-SchedulerAndGPU {
     Write-Action "Ajustando scheduler multimedia y prioridad GPU..."
     Set-RegistryValueSafe 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' 'NetworkThrottlingIndex' 0xffffffff ([Microsoft.Win32.RegistryValueKind]::DWord)
@@ -181,12 +222,16 @@ function Optimize-Network {
     Remember 'TCPSetting' 'Internet' (Get-NetTCPSetting -SettingName Internet)
     Set-NetTCPSetting -SettingName InternetCustom -AutoTuningLevelLocal Normal -ScalingHeuristics Disabled -EcnCapability Disabled -Timestamps Disabled -MemoryPressureProtection Enabled -InitialCongestionWindow 10 -MinRto 300 | Out-Null
     Set-NetTCPSetting -SettingName Internet -AutoTuningLevelLocal Normal | Out-Null
-    Write-Action "Desactivando ahorro de energ?a de adaptadores..."
+    Write-Action "Desactivando ahorro de energía de adaptadores..."
     $adapters = Get-NetAdapter -Physical | Where-Object { $_.Status -eq 'Up' -or $_.Status -eq 'Dormant' }
     foreach ($nic in $adapters) {
         $pm = Get-NetAdapterPowerManagement -Name $nic.Name
         Remember 'NICPower' $nic.Name $pm
-        Set-NetAdapterPowerManagement -Name $nic.Name -AllowComputerToTurnOffDevice Disabled -DeviceSleepOnDisconnect Disabled -WakeOnMagicPacket Enabled -WakeOnPattern Disabled -ErrorAction SilentlyContinue
+        try {
+            Set-NetAdapterPowerManagement -Name $nic.Name -WakeOnMagicPacket Enabled -WakeOnPattern Disabled -DeviceSleepOnDisconnect Disabled -ReduceSpeedOnPowerDown Disabled -ErrorAction Stop
+        } catch {
+            # Si alguna propiedad no existe en el adaptador, lo ignoramos
+        }
     }
     Write-Action "Aplicando desactivaci?n de Nagle por interfaz..."
     $ifaces = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
@@ -197,6 +242,25 @@ function Optimize-Network {
         $path = "HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$guid"
         Set-RegistryValueSafe $path 'TcpAckFrequency' 1
         Set-RegistryValueSafe $path 'TCPNoDelay' 1
+    }
+}
+
+function Optimize-Wifi {
+    Write-Action "Optimizando Wi-Fi (prioridad y sin ahorro de energ?a)..."
+    $wifiAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -match 'Wireless|Wi-Fi|802\.11' }
+    if (-not $wifiAdapters) { Write-Action "No se detectaron adaptadores Wi-Fi activos, saltando..." "Yellow"; return }
+    foreach ($nic in $wifiAdapters) {
+        try {
+            $pm = Get-NetAdapterPowerManagement -Name $nic.Name -ErrorAction Stop
+            Remember 'NICPower' $nic.Name $pm
+            Set-NetAdapterPowerManagement -Name $nic.Name -WakeOnMagicPacket Enabled -WakeOnPattern Disabled -DeviceSleepOnDisconnect Disabled -ReduceSpeedOnPowerDown Disabled -ErrorAction SilentlyContinue
+        } catch {}
+        try {
+            $iface = Get-NetIPInterface -InterfaceAlias $nic.InterfaceAlias -AddressFamily IPv4 -ErrorAction Stop
+            Remember 'InterfaceMetric' $nic.InterfaceAlias ([pscustomobject]@{ InterfaceMetric = $iface.InterfaceMetric; AutomaticMetric = $iface.AutomaticMetric })
+            Set-NetIPInterface -InterfaceAlias $nic.InterfaceAlias -AddressFamily IPv4 -InterfaceMetric 10 -AutomaticMetric Disabled -ErrorAction SilentlyContinue
+        } catch {}
+        try { netsh wlan set autoconfig enabled=yes interface="$($nic.Name)" | Out-Null } catch {}
     }
 }
 
@@ -271,6 +335,8 @@ function Apply-FullOptimization {
     Set-UltimatePlan
     Set-TimerResolution -Milliseconds 0.5
     Optimize-Network
+    $wifiChoice = Read-Host "¿Aplicar optimizaci?n Wi-Fi adicional? (S/N)"
+    if ($wifiChoice -match '^[sS]') { Optimize-Wifi }
     Optimize-Services
     Clean-Tasks
     Remove-Bloatware
@@ -286,6 +352,8 @@ function Apply-LightOptimization {
     Set-UltimatePlan
     Set-TimerResolution -Milliseconds 0.5
     Optimize-Network
+    $wifiChoice = Read-Host "¿Aplicar optimizaci?n Wi-Fi adicional? (S/N)"
+    if ($wifiChoice -match '^[sS]') { Optimize-Wifi }
     Optimize-ExplorerUI
     Save-Backup
     Write-Action "Optimizaci?n ligera aplicada. Reinicia para que todo surta efecto." 'Green'
@@ -300,6 +368,7 @@ function Restore-Defaults {
     Restore-Appx
     Restore-PowerPlan
     Restore-TimerResolution
+    Restore-NetworkTweaks
     Write-Action "Restauraci?n terminada. Reinicia para asegurar que todo vuelva a estado original." 'Green'
 }
 

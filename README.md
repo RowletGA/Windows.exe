@@ -1,29 +1,29 @@
-﻿# Windows.exe
+# Windows.exe
 
-Script PowerShell para optimizar Windows 11 (22H2+) para gaming, centrado en CS2. Incluye punto de restauración, menú interactivo y función de reversión completa.
+Script PowerShell para optimizar Windows 11 (22H2+) para gaming, centrado en CS2. Incluye punto de restauracion, menu interactivo y funcion de reversion completa.
 
-## Uso rápido
+## Uso rapido
 1. Abrir PowerShell **como Administrador** en esta carpeta.
 2. Ejecutar: `powershell -ExecutionPolicy Bypass -File .\Optimize-CS2.ps1`
-3. Elegir en el menú:
-   - 1) Optimización completa (agresiva, desactiva servicios y quita bloat no crítico)
-   - 2) Optimización ligera (mantiene servicios/apps, pero aplica tweaks de rendimiento)
-   - 3) Restaurar valores por defecto (revierte todo lo respaldado)
+3. Elegir en el menu:
+   - 1) Optimizacion completa (agresiva, desactiva servicios y quita bloat no critico). Pregunta si deseas optimizar Wi-Fi.
+   - 2) Optimizacion ligera (mantiene servicios/apps, pero aplica tweaks de rendimiento). Pregunta si deseas optimizar Wi-Fi.
+   - 3) Restaurar valores por defecto (revierte todo lo respaldado).
 
-## Qué hace
-- Crea un punto de restauración (si está disponible).
-- Respalda claves de registro, servicios, tareas y apps removidas en `C:\ProgramData\CS2_Optimize_Backup.json`.
+## Que hace
+- Crea un punto de restauracion (si esta disponible).
+- Respalda claves de registro, servicios, tareas, apps removidas y ajustes de red en `C:\ProgramData\CS2_Optimize_Backup.json`.
 - Optimiza scheduler multimedia, prioridad GPU, GameDVR off, HAGS on.
-- Crea y activa plan de energía "CS2 Ultimate Performance" (duplica Ultimate Performance). Desactiva reposo en CA.
+- Crea/renombra/activa de forma robusta el plan de energia "CS2 Ultimate Performance" (duplica Ultimate Performance si no existe) y desactiva reposo en CA. Si estaba activo otro plan, se guarda para restaurar.
 - Solicita timer resolution 0.5 ms mientras el script viva.
-- Optimiza red: TCP tuning seguro, desactiva ahorro de energía en NICs, desactiva Nagle en interfaces activas.
-- Desactiva servicios no críticos para gaming: Print Spooler, Fax, DiagTrack, RetailDemo, MapsBroker, WSearch.
-- Deshabilita tareas de telemetría conocidas.
-- Quita bloatware no crítico (mantiene Xbox/Store/Update/audio/red/GPUs).
-- Opcional UI: desactiva animaciones de Explorer y acelera menús.
+- Optimiza red: TCP tuning seguro, desactiva ahorro de energia en NICs, desactiva Nagle en interfaces activas. Opcional Wi-Fi: desactiva ahorro de energia, habilita Wake on Magic Packet, fuerza metrica IPv4 10 y desactiva metrica automatica para priorizar el adaptador Wi-Fi.
+- Desactiva servicios no criticos para gaming: Print Spooler, Fax, DiagTrack, RetailDemo, MapsBroker, WSearch.
+- Deshabilita tareas de telemetria conocidas.
+- Quita bloatware no critico (mantiene Xbox/Store/Update/audio/red/GPUs).
+- Opcional UI: desactiva animaciones de Explorer y acelera menus.
 
 ## Restaurar
-- Opción 3 del menú carga el respaldo y revierte registro, servicios, tareas, apps y plan de energía previo.
+- Opcion 3 del menu carga el respaldo y revierte registro, servicios, tareas, apps, plan de energia previo y ajustes de red/metrica.
 
 ## Notas
 - Requiere reiniciar tras aplicar o restaurar para que todo tome efecto.
